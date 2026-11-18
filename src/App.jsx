@@ -1,3 +1,218 @@
-import React,{useState} from 'react';import {Layout,Menu,Select,Space,Avatar,Typography,Button,ConfigProvider,Tag,Popconfirm} from 'antd';import {DashboardOutlined,DatabaseOutlined,PlusSquareOutlined,ExportOutlined,LockOutlined,SwapOutlined,InboxOutlined,RollbackOutlined,HistoryOutlined,MenuFoldOutlined,MenuUnfoldOutlined,UserOutlined,SettingOutlined} from '@ant-design/icons';import {useInventory} from './context/InventoryContext';import Dashboard from './pages/Dashboard';import Inventory from './pages/Inventory';import Entry from './pages/Entry';import Operations from './pages/Operations';import Warehouse from './pages/Warehouse';import History from './pages/History';import './styles/main.css';
-const {Header,Sider,Content}=Layout;
-export default function App(){const {role,setRole,reset}=useInventory();const [page,setPage]=useState('dashboard');const [collapsed,setCollapsed]=useState(false);const [detailId,setDetailId]=useState(null);const manager=['Supervisor','Gestor'].includes(role);const menu=[{key:'dashboard',icon:<DashboardOutlined/>,label:'Dashboard'},{key:'inventario',icon:<DatabaseOutlined/>,label:'Inventario general'},...(role==='Supervisor'?[{key:'ingresos',icon:<PlusSquareOutlined/>,label:'Ingresos de inventario'}]:[]),...(manager?[{key:'descargas',icon:<ExportOutlined/>,label:'Descargas'},{key:'reservas',icon:<LockOutlined/>,label:'Reservas y liberaciones'},{key:'transferencias',icon:<SwapOutlined/>,label:'Transferencias'}]:[]),...(role==='Almacenero'?[{key:'almacen',icon:<InboxOutlined/>,label:'Operaciones de almacén'},{key:'devoluciones',icon:<RollbackOutlined/>,label:'Devoluciones'}]:[]),...(role!=='Usuario'?[{key:'historial',icon:<HistoryOutlined/>,label:'Historial y trazabilidad'}]:[])];const allowed=menu.some(x=>x.key===page);const current=allowed?page:'dashboard';const content={dashboard:<Dashboard navigate={setPage}/>,inventario:<Inventory detailId={detailId} setDetailId={setDetailId}/>,ingresos:<Entry/>,descargas:<Operations mode="descargas"/>,reservas:<Operations mode="reservas"/>,transferencias:<Operations mode="transferencias"/>,almacen:<Warehouse/>,devoluciones:<Warehouse returns/>,historial:<History/>};return <ConfigProvider theme={{token:{colorPrimary:'#2387f4',borderRadius:9,fontFamily:'Arial, Helvetica, sans-serif'},components:{Menu:{itemSelectedBg:'#e5f3ff',itemSelectedColor:'#2683e8',itemHeight:43}}}}><Layout style={{minHeight:'100vh'}}><Sider width={273} theme="light" collapsible collapsed={collapsed} trigger={null} collapsedWidth={76} className="sidebar"><div className="sidebar-heading"><div className="sidebar-title">{collapsed?'IM':'Menú'}</div>{!collapsed&&<div className="sidebar-subtitle">Soporte Frontline IM</div>}</div><Menu mode="inline" selectedKeys={[current]} items={menu} onClick={({key})=>setPage(key)} className="side-menu"/></Sider><Layout><Header className="header"><div className="header-left"><Button type="text" className="collapse-btn" onClick={()=>setCollapsed(v=>!v)} icon={collapsed?<MenuUnfoldOutlined/>:<MenuFoldOutlined/>}/><span>Control de Inventario y Activos</span></div><Space size="middle" wrap><Select value={role} onChange={v=>{setRole(v);setPage('dashboard')}} style={{width:140}} options={['Supervisor','Gestor','Almacenero','Usuario'].map(x=>({value:x,label:x}))}/><span className="header-user">Soporte Frontline IM</span><Avatar icon={<UserOutlined/>} style={{background:'#00166a'}}/></Space></Header><Content className="content-area"><div className="workspace">{content[current]}<div className="demo-footer"><span>PROTOTIPO · Datos ficticios · Almacenamiento local del navegador</span><Popconfirm title="¿Reiniciar los datos de prueba?" onConfirm={()=>{reset();setPage('dashboard')}}><Button size="small" type="link">Reiniciar demo</Button></Popconfirm></div></div></Content></Layout></Layout></ConfigProvider>}
+import React, { useState } from "react";
+import {
+  Layout,
+  Menu,
+  Select,
+  Space,
+  Avatar,
+  Typography,
+  Button,
+  ConfigProvider,
+  Tag,
+  Popconfirm,
+} from "antd";
+import {
+  DashboardOutlined,
+  DatabaseOutlined,
+  PlusSquareOutlined,
+  ExportOutlined,
+  LockOutlined,
+  SwapOutlined,
+  InboxOutlined,
+  RollbackOutlined,
+  HistoryOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  UserOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
+import { useInventory } from "./context/InventoryContext";
+import Dashboard from "./pages/Dashboard";
+import Inventory from "./pages/Inventory";
+import Entry from "./pages/Entry";
+import RMA from "./pages/RMA";
+import Operations from "./pages/Operations";
+import Warehouse from "./pages/Warehouse";
+import History from "./pages/History";
+import "./styles/main.css";
+const { Header, Sider, Content } = Layout;
+export default function App() {
+  const { role, setRole, reset } = useInventory();
+  const [page, setPage] = useState("dashboard");
+  const [collapsed, setCollapsed] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  const manager = ["Supervisor", "Gestor"].includes(role);
+  const menu = [
+    { key: "dashboard", icon: <DashboardOutlined />, label: "Dashboard" },
+    {
+      key: "inventario",
+      icon: <DatabaseOutlined />,
+      label: "Inventario general",
+    },
+    ...(role === "Supervisor"
+      ? [
+          {
+            key: "ingresos",
+            icon: <PlusSquareOutlined />,
+            label: "Ingresos de inventario",
+          },
+        ]
+      : []),
+    ...(manager
+      ? [
+          {
+            key: "descargas",
+            icon: <ExportOutlined />,
+            label: "Salidas y despachos",
+          },
+          {
+            key: "transferencias",
+            icon: <SwapOutlined />,
+            label: "Transferencias",
+          },
+        ]
+      : []),
+    ...(manager
+      ? [
+          {
+            key: "rma",
+            icon: <RollbackOutlined />,
+            label: "Devolución",
+          },
+        ]
+      : []),
+    ...(role === "Almacenero"
+      ? [
+          {
+            key: "almacen",
+            icon: <InboxOutlined />,
+            label: "Operaciones de almacén",
+          },
+          {
+            key: "devoluciones",
+            icon: <RollbackOutlined />,
+            label: "Devoluciones",
+          },
+        ]
+      : []),
+    ...(role !== "Usuario"
+      ? [
+          {
+            key: "historial",
+            icon: <HistoryOutlined />,
+            label: "Historial y trazabilidad",
+          },
+        ]
+      : []),
+  ];
+  const allowed = menu.some((x) => x.key === page);
+  const current = allowed ? page : "dashboard";
+  const content = {
+    dashboard: <Dashboard navigate={setPage} />,
+    inventario: <Inventory detailId={detailId} setDetailId={setDetailId} />,
+    ingresos: <Entry />,
+    rma: <RMA />,
+    descargas: <Operations mode="descargas" />,
+    transferencias: <Operations mode="transferencias" />,
+    almacen: <Warehouse />,
+    devoluciones: <Warehouse returns />,
+    historial: <History />,
+  };
+  return (
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: "#2387f4",
+          borderRadius: 9,
+          fontFamily: "Arial, Helvetica, sans-serif",
+        },
+        components: {
+          Menu: {
+            itemSelectedBg: "#e5f3ff",
+            itemSelectedColor: "#2683e8",
+            itemHeight: 43,
+          },
+        },
+      }}
+    >
+      <Layout style={{ minHeight: "100vh" }}>
+        <Sider
+          width={273}
+          theme="light"
+          collapsible
+          collapsed={collapsed}
+          trigger={null}
+          collapsedWidth={76}
+          className="sidebar"
+        >
+          <div className="sidebar-heading">
+            <div className="sidebar-title">{collapsed ? "IM" : "Menú"}</div>
+            {!collapsed && (
+              <div className="sidebar-subtitle">Soporte Frontline IM</div>
+            )}
+          </div>
+          <Menu
+            mode="inline"
+            selectedKeys={[current]}
+            items={menu}
+            onClick={({ key }) => setPage(key)}
+            className="side-menu"
+          />
+        </Sider>
+        <Layout>
+          <Header className="header">
+            <div className="header-left">
+              <Button
+                type="text"
+                className="collapse-btn"
+                onClick={() => setCollapsed((v) => !v)}
+                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              />
+              <span>Control de Inventario y Activos</span>
+            </div>
+            <Space size="middle" wrap>
+              <Select
+                value={role}
+                onChange={(v) => {
+                  setRole(v);
+                  setPage("dashboard");
+                }}
+                style={{ width: 140 }}
+                options={["Supervisor", "Gestor", "Almacenero", "Usuario"].map(
+                  (x) => ({ value: x, label: x }),
+                )}
+              />
+              <span className="header-user">Soporte Frontline IM</span>
+              <Avatar
+                icon={<UserOutlined />}
+                style={{ background: "#00166a" }}
+              />
+            </Space>
+          </Header>
+          <Content className="content-area">
+            <div className="workspace">
+              {content[current]}
+              <div className="demo-footer">
+                <span>
+                  PROTOTIPO · Datos ficticios · Almacenamiento local del
+                  navegador
+                </span>
+                <Popconfirm
+                  title="¿Reiniciar los datos de prueba?"
+                  onConfirm={() => {
+                    reset();
+                    setPage("dashboard");
+                  }}
+                >
+                  <Button size="small" type="link">
+                    Reiniciar demo
+                  </Button>
+                </Popconfirm>
+              </div>
+            </div>
+          </Content>
+        </Layout>
+      </Layout>
+    </ConfigProvider>
+  );
+}
