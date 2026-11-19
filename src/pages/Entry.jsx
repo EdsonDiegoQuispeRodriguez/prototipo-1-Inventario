@@ -168,7 +168,7 @@ export default function Entry() {
                             ? [{ required: true, message: "Campo obligatorio" }]
                             : []
                         }
-                      >fields=[['category','Categoría'],['subcategory','Subcategoría'],['brand','Marca'],['type','Tipo'],['model','Modelo'],['serial','Serie / IMEI'],['quantity','Cantidad'],['condition','Condición'],['area','Área'],['superintendence','Superintendencia'],['cost','Costo'],['status','Estado'],['substatus','Subestado'],['warehouse','Almacén'],['location','Ubicación / código'],['shelf','Anaquel'],['column','Columna'],['row','Fila'],['received','Fecha recepción'],['origin','Origen'],['destination','Destino'],['user','Usuario'],['purchaseOrder','OC'],['ticket','Ticket'],['manager','Gestor'],['project','Proyecto'],['notes','Observaciones']];
+                      >
                         {key === "quantity" ? (
                           <InputNumber
                             min={1}
