@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { EyeOutlined } from "@ant-design/icons";
+import RequestDetail from "../components/RequestDetail";
 import {
   Card,
   Form,
@@ -47,6 +49,7 @@ export default function Entry() {
   const [from, setFrom] = useState(null);
   const [reason, setReason] = useState("");
   const [screen, setScreen] = useState("list");
+  const [selected, setSelected] = useState(null);
   const add = (v) => {
     setItems((c) => [...c, { ...v, _key: Date.now() + "-" + Math.random() }]);
     form.resetFields();
@@ -81,7 +84,13 @@ export default function Entry() {
           </Button>
         </Space>
       </Card>
-      {screen === "list" ? (
+      {selected ? (
+        <RequestDetail
+          request={db.requests.find((r) => r.id === selected)}
+          assets={db.assets}
+          onBack={() => setSelected(null)}
+        />
+      ) : screen === "list" ? (
         <Card className="main-card" title="Solicitudes de ingreso">
           <Table
             rowKey="id"
@@ -102,35 +111,18 @@ export default function Entry() {
                 ),
               },
               { title: "Fecha", dataIndex: "date" },
+              {
+                title: "Detalle",
+                render: (_, r) => (
+                  <Button
+                    icon={<EyeOutlined />}
+                    onClick={() => setSelected(r.id)}
+                  >
+                    Ver detalle
+                  </Button>
+                ),
+              },
             ]}
-            expandable={{
-              expandedRowRender: (r) => (
-                <Table
-                  size="small"
-                  pagination={false}
-                  rowKey="assetId"
-                  dataSource={r.lines}
-                  columns={[
-                    { title: "Activo", dataIndex: "assetId" },
-                    {
-                      title: "Modelo",
-                      render: (_, l) =>
-                        db.assets.find((a) => a.id === l.assetId)?.model,
-                    },
-                    {
-                      title: "Serie",
-                      render: (_, l) =>
-                        db.assets.find((a) => a.id === l.assetId)?.serial ||
-                        "—",
-                    },
-                    {
-                      title: "Check",
-                      render: (_, l) => (l.checked ? "✓" : "Pendiente"),
-                    },
-                  ]}
-                />
-              ),
-            }}
           />
         </Card>
       ) : (
@@ -156,7 +148,15 @@ export default function Entry() {
                 {fields
                   .filter(
                     ([key]) =>
-                      !["status", "substatus", "warehouse"].includes(key),
+                      ![
+                        "status",
+                        "substatus",
+                        "warehouse",
+                        "shelf",
+                        "row",
+                        "column",
+                        "location",
+                      ].includes(key),
                   )
                   .map(([key, label]) => (
                     <Col xs={24} md={12} xl={8} key={key}>
@@ -168,7 +168,7 @@ export default function Entry() {
                             ? [{ required: true, message: "Campo obligatorio" }]
                             : []
                         }
-                      >
+                      >fields=[['category','Categoría'],['subcategory','Subcategoría'],['brand','Marca'],['type','Tipo'],['model','Modelo'],['serial','Serie / IMEI'],['quantity','Cantidad'],['condition','Condición'],['area','Área'],['superintendence','Superintendencia'],['cost','Costo'],['status','Estado'],['substatus','Subestado'],['warehouse','Almacén'],['location','Ubicación / código'],['shelf','Anaquel'],['column','Columna'],['row','Fila'],['received','Fecha recepción'],['origin','Origen'],['destination','Destino'],['user','Usuario'],['purchaseOrder','OC'],['ticket','Ticket'],['manager','Gestor'],['project','Proyecto'],['notes','Observaciones']];
                         {key === "quantity" ? (
                           <InputNumber
                             min={1}

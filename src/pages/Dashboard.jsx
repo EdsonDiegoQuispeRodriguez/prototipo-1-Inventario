@@ -1,2 +1,152 @@
-import React from 'react';import {Row,Col,Card,Table,Tag,Alert} from 'antd';import {DatabaseOutlined,CheckCircleOutlined,LockOutlined,ClockCircleOutlined,SwapOutlined,InboxOutlined} from '@ant-design/icons';import {useInventory} from '../context/InventoryContext';import {StatCard,PageHeading} from '../components/Common';
-export default function Dashboard({navigate}){const {db,warehouse,role,available}=useInventory();const rows=db.assets.filter(a=>a.warehouse===warehouse);const physical=rows.reduce((s,a)=>s+Number(a.quantity),0);const free=rows.reduce((s,a)=>s+available(a),0);const reservations=db.requests.filter(r=>r.type==='Salida'&&r.from===warehouse&&['Pendiente de preparación','En preparación'].includes(r.status)).reduce((s,r)=>s+r.lines.length,0);const pending=db.requests.filter(o=>o.from===warehouse&&['Pendiente de preparación','En preparación'].includes(o.status)).length;const stats=[['Stock físico',physical,'#102a8a',<DatabaseOutlined/>],['Disponible',free,'#2386ef',<CheckCircleOutlined/>],['Reservado',reservations,'#5ac62d',<LockOutlined/>],['Pendientes',pending,'#ffb52e',<ClockCircleOutlined/>],['En tránsito',db.requests.filter(o=>o.status==='En tránsito').length,'#ff5662',<SwapOutlined/>],['Recepciones pendientes',db.requests.filter(r=>['Ingreso','RMA'].includes(r.type)&&r.from===warehouse&&r.status==='Pendiente de recepción').length,'#934bd2',<InboxOutlined/>],['Movimientos',db.requests.length,'#21bec3',<InboxOutlined/>]].filter(x=>role!=='Usuario'||['Disponible'].includes(x[0]));return <><PageHeading title="Dashboard de Inventario" subtitle={`Vista general del almacén ${warehouse} · seguimiento de existencias y operaciones`}/><Row gutter={[16,16]}>{stats.map(([title,value,color,icon])=><Col xs={12} md={8} xl={4} key={title}><StatCard {...{title,value,color,icon}}/></Col>)}</Row><Card className="main-card" title="Inventario disponible por artículo" extra={<a onClick={()=>navigate('inventario')}>Ver inventario completo →</a>}><Table size="middle" rowKey="id" pagination={{pageSize:6}} dataSource={rows} columns={[{title:'Código',dataIndex:'id'},{title:'Categoría',dataIndex:'category'},{title:'Equipo / modelo',dataIndex:'model'},{title:'Ubicación',dataIndex:'location'},...(role==='Usuario'?[]:[{title:'Físico',dataIndex:'quantity'}]),{title:'Disponible',render:(_,a)=><Tag color={available(a)?'green':'red'}>{available(a)}</Tag>}]} scroll={{x:700}}/></Card>{role!=='Usuario'&&<Card className="main-card" title="Últimos eventos"><Table rowKey="id" pagination={{pageSize:4}} dataSource={db.events} columns={[{title:'Fecha',dataIndex:'date'},{title:'Evento',dataIndex:'action'},{title:'Detalle',dataIndex:'detail'},{title:'Perfil',dataIndex:'actor'}]} scroll={{x:700}}/></Card>}</>}
+import React, { useMemo, useState } from "react";
+import {
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Table,
+  Tag,
+  Select,
+  Space,
+  Button,
+} from "antd";
+import { useInventory } from "../context/InventoryContext";
+import { PageHeading } from "../components/Common";
+const money = (n) =>
+  `S/ ${Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export default function Dashboard({ navigate }) {
+  const { db, warehouses, role, available } = useInventory();
+  const [scope, setScope] = useState("ALL");
+  const assets = useMemo(
+    () => db.assets.filter((a) => scope === "ALL" || a.warehouse === scope),
+    [db, scope],
+  );
+  const stats = [
+    ["Activos registrados", assets.length],
+    ["Disponibles", assets.filter((a) => available(a)).length],
+    ["Asignados", assets.filter((a) => a.status === "ASIGNADO").length],
+    ["En tránsito", assets.filter((a) => a.status === "EN TRÁNSITO").length],
+    [
+      "Recepciones pendientes",
+      db.requests.filter(
+        (r) =>
+          ["Ingreso", "Devolución"].includes(r.type) &&
+          r.status === "Pendiente de recepción" &&
+          (scope === "ALL" || r.from === scope),
+      ).length,
+    ],
+    [
+      "Solicitudes",
+      db.requests.filter(
+        (r) => scope === "ALL" || r.from === scope || r.to === scope,
+      ).length,
+    ],
+  ];
+  const value = assets.reduce((n, a) => n + (Number(a.cost) || 0), 0),
+    availableValue = assets
+      .filter((a) => available(a))
+      .reduce((n, a) => n + (Number(a.cost) || 0), 0);
+  const sup = Object.values(
+    assets.reduce((o, a) => {
+      const key = a.superintendence || "Sin superintendencia";
+      o[key] ??= { key, count: 0, available: 0, assigned: 0, value: 0 };
+      o[key].count++;
+      o[key].available += available(a);
+      o[key].assigned += a.status === "ASIGNADO" ? 1 : 0;
+      o[key].value += Number(a.cost) || 0;
+      return o;
+    }, {}),
+  ).sort((a, b) => b.value - a.value);
+  return (
+    <>
+      <PageHeading
+        title="Dashboard de Inventario"
+        subtitle="Existencias, valorización registrada y distribución por superintendencia"
+      />
+      <Card className="main-card" style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <b>Almacenes:</b>
+          <Select
+            style={{ width: 220 }}
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: "ALL", label: "Todos los almacenes" },
+              ...warehouses.map((w) => ({ value: w, label: w })),
+            ]}
+          />
+        </Space>
+      </Card>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        {stats.map(([title, value]) => (
+          <Col xs={12} md={8} xl={4} key={title}>
+            <Card className="main-card">
+              <Statistic title={title} value={value} />
+            </Card>
+          </Col>
+        ))}
+      </Row>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24} md={12}>
+          <Card className="main-card">
+            <Statistic
+              title="Valor total registrado"
+              value={value}
+              precision={2}
+              prefix="S/ "
+            />
+          </Card>
+        </Col>
+        <Col xs={24} md={12}>
+          <Card className="main-card">
+            <Statistic
+              title="Valor de activos disponibles"
+              value={availableValue}
+              precision={2}
+              prefix="S/ "
+            />
+          </Card>
+        </Col>
+      </Row>
+      <Card
+        className="main-card"
+        title="Valorización por superintendencia"
+        style={{ marginBottom: 16 }}
+      >
+        <Table
+          rowKey="key"
+          dataSource={sup}
+          columns={[
+            { title: "Superintendencia", dataIndex: "key" },
+            { title: "Activos", dataIndex: "count" },
+            { title: "Disponibles", dataIndex: "available" },
+            { title: "Asignados", dataIndex: "assigned" },
+            { title: "Valor registrado", dataIndex: "value", render: money },
+          ]}
+          pagination={{ pageSize: 8 }}
+        />
+        <small>
+          Los importes se calculan con el costo registrado por activo. No
+          representan valor contable depreciado ni valor de mercado. Los activos
+          sin costo registrado aportan S/ 0 al total.
+        </small>
+      </Card>
+      {role !== "Usuario" && (
+        <Card className="main-card" title="Últimos eventos">
+          <Table
+            rowKey="id"
+            pagination={{ pageSize: 5 }}
+            dataSource={db.events}
+            columns={[
+              { title: "Fecha", dataIndex: "date" },
+              { title: "Evento", dataIndex: "action" },
+              { title: "Detalle", dataIndex: "detail" },
+              { title: "Perfil", dataIndex: "actor" },
+            ]}
+            scroll={{ x: 700 }}
+          />
+        </Card>
+      )}
+    </>
+  );
+}

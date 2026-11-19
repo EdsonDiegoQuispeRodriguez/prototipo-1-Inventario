@@ -1,13 +1,269 @@
-import React,{useState} from 'react';
-import {Card,Table,Button,Form,Select,InputNumber,Input,Alert,message,Popconfirm,Space,Descriptions,Tag} from 'antd';
-import {useInventory} from '../context/InventoryContext';
-import {PageHeading,tagStatus} from '../components/Common';
-export default function Warehouse({returns=false}){
- const {db,warehouse,setWarehouse,warehouses,advanceRequest,receive,checkReception,closeReception}=useInventory();
- const [form]=Form.useForm(),[expanded,setExpanded]=useState(null);
- const reception=db.requests.filter(r=>['Ingreso','RMA'].includes(r.type)&&r.from===warehouse&&r.status==='Pendiente de recepción');
- const tasks=db.requests.filter(r=>(r.from===warehouse&&['Pendiente de preparación','En preparación'].includes(r.status))||(r.to===warehouse&&r.status==='En tránsito'));
- const confirm=r=>{advanceRequest(r.id)?message.success('Solicitud completa actualizada'):message.error('No se pudo confirmar la operación')};
- const receptionCard=<Card className="main-card" title={`Recepciones pendientes de ingreso y RMA (${reception.length})`} style={{marginBottom:18}}><Alert showIcon type="info" style={{marginBottom:12}} message="Marca cada activo recibido físicamente. Solo cuando todos estén verificados se podrá cerrar la solicitud completa y actualizar el inventario."/><Table rowKey="id" dataSource={reception} scroll={{x:950}} expandable={{expandedRowRender:r=><Table rowKey="assetId" size="small" pagination={false} dataSource={r.lines} columns={[{title:'Código',dataIndex:'assetId'},{title:'Modelo',render:(_,l)=>db.assets.find(a=>a.id===l.assetId)?.model},{title:'Serie',render:(_,l)=>db.assets.find(a=>a.id===l.assetId)?.serial||'—'},{title:'Check físico',render:(_,l)=><Button type={l.checked?'primary':'default'} onClick={()=>checkReception(r.id,l.assetId,!l.checked)}>{l.checked?'✓ Verificado':'Marcar recibido'}</Button>}]} />}} columns={[{title:'Solicitud',dataIndex:'id'},{title:'Tipo',render:(_,r)=>r.type==='RMA'?`RMA · ${r.decision}`:'Ingreso nuevo'},{title:'Activos',render:(_,r)=>r.lines.length},{title:'Verificados',render:(_,r)=>`${r.lines.filter(l=>l.checked).length}/${r.lines.length}`},{title:'Solicitado por',dataIndex:'by'},{title:'Acción',render:(_,r)=><Popconfirm title="¿Cerrar solicitud y aplicar todos los activos?" onConfirm={()=>closeReception(r.id)?message.success('Recepción cerrada; inventario actualizado'):message.error('Verifica todos los activos primero')}><Button type="primary" disabled={r.lines.some(l=>!l.checked)}>Cerrar recepción completa</Button></Popconfirm>}]} /></Card>;
- return <><PageHeading title={returns?'Recepción de devoluciones':'Operaciones de almacén'} subtitle={returns?'Registro físico e inspección de devoluciones':'Preparación y despacho por solicitud completa; transferencias con recepción en destino'}/><Card className="main-card" style={{marginBottom:16}}><Space wrap><b>Almacén operativo:</b><Select style={{width:190}} value={warehouse} onChange={setWarehouse} options={warehouses.map(w=>({value:w,label:w}))}/></Space></Card>{!returns&&receptionCard}{returns?<Card className="main-card" title="Registrar devolución física"><Alert showIcon type="warning" style={{marginBottom:20}} message="Los activos averiados se reciben bloqueados y no aumentan el stock disponible."/><Form form={form} layout="vertical" onFinish={v=>{const ok=receive(v.assetId,1,v.condition,v.notes);if(ok){message.success('Devolución registrada');form.resetFields()}else message.error('No se pudo registrar')}}><Form.Item label="Activo / artículo" name="assetId" rules={[{required:true}]}><Select showSearch optionFilterProp="label" options={db.assets.filter(a=>a.warehouse===warehouse).map(a=>({value:a.id,label:`${a.id} · ${a.model} · ${a.serial||'Sin serie'}`}))}/></Form.Item><Form.Item label="Resultado de inspección" name="condition" rules={[{required:true}]}><Select options={['Operativo','Averiado / bloqueado'].map(x=>({value:x,label:x}))}/></Form.Item><Form.Item label="Observaciones / ticket" name="notes"><Input.TextArea rows={3}/></Form.Item><Button type="primary" htmlType="submit">Confirmar recepción</Button></Form></Card>:<Card className="main-card" title={`Solicitudes pendientes (${tasks.length})`}><Alert style={{marginBottom:16}} showIcon type="info" message="La preparación y el despacho se confirman para todos los activos de una misma solicitud, no por líneas separadas."/><Table rowKey="id" dataSource={tasks} scroll={{x:1000}} expandable={{expandedRowKeys:expanded?[expanded]:[],onExpand:(open,r)=>setExpanded(open?r.id:null),expandedRowRender:r=><><Descriptions size="small" column={2}><Descriptions.Item label="Motivo">{r.reason}</Descriptions.Item><Descriptions.Item label="Solicitante">{r.by}</Descriptions.Item></Descriptions><Table rowKey="assetId" pagination={false} size="small" dataSource={r.lines} columns={[{title:'Código',dataIndex:'assetId'},{title:'Modelo',render:(_,l)=>db.assets.find(a=>a.id===l.assetId)?.model},{title:'Serie seleccionada',render:(_,l)=>db.assets.find(a=>a.id===l.assetId)?.serial||'Sin serie'}]}/></>}} columns={[{title:'Solicitud',dataIndex:'id'},{title:'Tipo',dataIndex:'type'},{title:'Activos',render:(_,r)=>r.lines.length},{title:'Origen',dataIndex:'from'},{title:'Destino',dataIndex:'to',render:v=>v||'—'},{title:'Estado',dataIndex:'status',render:tagStatus},{title:'Acción',render:(_,r)=><Popconfirm title={`¿Confirmar ${r.lines.length} activos de la solicitud?`} description="Verifica físicamente los códigos y series antes de confirmar." onConfirm={()=>confirm(r)}><Button type="primary">{r.status==='Pendiente de preparación'?'Iniciar preparación':r.status==='En preparación'?'Despachar solicitud completa':'Confirmar recepción completa'}</Button></Popconfirm>}]} /></Card>}</>;
+import React, { useState } from "react";
+import {
+  Card,
+  Table,
+  Button,
+  Select,
+  Alert,
+  message,
+  Popconfirm,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
+import { EyeOutlined } from "@ant-design/icons";
+import { useInventory } from "../context/InventoryContext";
+import { PageHeading, tagStatus } from "../components/Common";
+import RequestDetail from "../components/RequestDetail";
+export default function Warehouse({ returns = false }) {
+  const {
+    db,
+    warehouse,
+    setWarehouse,
+    warehouses,
+    locationOptions,
+    advanceRequest,
+    checkReception,
+    closeReception,
+  } = useInventory();
+  const [selected, setSelected] = useState(null),
+    [locations, setLocations] = useState({});
+  const reception = db.requests.filter(
+    (r) =>
+      ["Ingreso", "Devolución"].includes(r.type) &&
+      r.from === warehouse &&
+      r.status === "Pendiente de recepción",
+  );
+  const tasks = db.requests.filter(
+    (r) =>
+      (r.from === warehouse &&
+        ["Pendiente de preparación", "En preparación"].includes(r.status)) ||
+      (r.to === warehouse && r.status === "En tránsito"),
+  );
+  const selectedRequest = db.requests.find((r) => r.id === selected);
+  const receiveActions =
+    selectedRequest &&
+    ["Ingreso", "Devolución"].includes(selectedRequest.type) &&
+    selectedRequest.status === "Pendiente de recepción" &&
+    selectedRequest.from === warehouse;
+  const taskActions =
+    selectedRequest &&
+    ["Salida", "Transferencia"].includes(selectedRequest.type) &&
+    tasks.some((r) => r.id === selectedRequest.id);
+  const confirm = () => {
+    if (advanceRequest(selectedRequest.id))
+      message.success("Solicitud completa actualizada");
+    else message.error("No se pudo confirmar");
+  };
+  const actions = receiveActions ? (
+    <>
+      <Alert
+        type="info"
+        showIcon
+        message="Selecciona el anaquel, fila y columna para cada activo antes de marcar su recepción. Los cambios se aplican al cerrar la solicitud."
+        style={{ marginBottom: 16 }}
+      />
+      <Table
+        rowKey="assetId"
+        pagination={false}
+        dataSource={selectedRequest.lines}
+        columns={[
+          { title: "Activo", dataIndex: "assetId" },
+          {
+            title: "Modelo",
+            render: (_, l) => db.assets.find((a) => a.id === l.assetId)?.model,
+          },
+          {
+            title: "Serie",
+            render: (_, l) =>
+              db.assets.find((a) => a.id === l.assetId)?.serial || "—",
+          },
+          {
+            title: "Ubicación física",
+            render: (_, l) => (
+              <Select
+                showSearch
+                optionFilterProp="label"
+                style={{ minWidth: 260 }}
+                disabled={l.checked}
+                placeholder="Anaquel · fila · columna"
+                value={l.locationCode || locations[l.assetId]}
+                onChange={(v) =>
+                  setLocations((x) => ({ ...x, [l.assetId]: v }))
+                }
+                options={locationOptions}
+              />
+            ),
+          },
+          {
+            title: "Check físico",
+            render: (_, l) => (
+              <Button
+                type={l.checked ? "primary" : "default"}
+                onClick={() => {
+                  const ok = checkReception(
+                    selectedRequest.id,
+                    l.assetId,
+                    !l.checked,
+                    l.checked ? undefined : locations[l.assetId],
+                  );
+                  if (ok)
+                    message.success(
+                      l.checked
+                        ? "Verificación revertida"
+                        : "Activo verificado",
+                    );
+                  else
+                    message.warning(
+                      "Selecciona la ubicación física antes de verificar",
+                    );
+                }}
+              >
+                {l.checked ? "✓ Verificado" : "Marcar recibido"}
+              </Button>
+            ),
+          },
+        ]}
+        scroll={{ x: 950 }}
+      />
+      <Popconfirm
+        title="¿Cerrar toda la solicitud?"
+        onConfirm={() =>
+          closeReception(selectedRequest.id)
+            ? message.success("Recepción cerrada e inventario actualizado")
+            : message.error("Verifica todos los activos y sus ubicaciones")
+        }
+      >
+        <Button
+          type="primary"
+          disabled={selectedRequest.lines.some(
+            (l) => !l.checked || !l.locationCode,
+          )}
+          style={{ marginTop: 16 }}
+        >
+          Cerrar recepción completa
+        </Button>
+      </Popconfirm>
+    </>
+  ) : taskActions ? (
+    <Popconfirm
+      title={`¿Confirmar ${selectedRequest.lines.length} activos?`}
+      onConfirm={confirm}
+    >
+      <Button type="primary">
+        {selectedRequest.status === "Pendiente de preparación"
+          ? "Iniciar preparación"
+          : selectedRequest.status === "En preparación"
+            ? "Despachar solicitud completa"
+            : "Confirmar recepción completa"}
+      </Button>
+    </Popconfirm>
+  ) : null;
+  return (
+    <>
+      <PageHeading
+        title={returns ? "Recepción de devoluciones" : "Operaciones de almacén"}
+        subtitle="Solicitudes agrupadas, verificación individual y cierre por solicitud completa"
+      />
+      <Card className="main-card" style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <b>Almacén operativo:</b>
+          <Select
+            style={{ width: 190 }}
+            value={warehouse}
+            onChange={(v) => {
+              setWarehouse(v);
+              setSelected(null);
+            }}
+            options={warehouses.map((w) => ({ value: w, label: w }))}
+          />
+        </Space>
+      </Card>
+      {selected ? (
+        <RequestDetail
+          request={selectedRequest}
+          assets={db.assets}
+          onBack={() => setSelected(null)}
+          extra={actions}
+        />
+      ) : (
+        <>
+          <Card
+            className="main-card"
+            title={`Recepciones pendientes (${reception.length})`}
+            style={{ marginBottom: 18 }}
+          >
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message="Ingresos y devoluciones se reciben en una misma bandeja. Abre el detalle para registrar anaqueles y verificar los activos."
+            />
+            <Table
+              rowKey="id"
+              dataSource={reception}
+              columns={[
+                { title: "Solicitud", dataIndex: "id" },
+                {
+                  title: "Tipo",
+                  render: (_, r) =>
+                    r.type === "Devolución"
+                      ? `Devolución · ${r.decision}`
+                      : "Ingreso",
+                },
+                { title: "Activos", render: (_, r) => r.lines.length },
+                {
+                  title: "Verificados",
+                  render: (_, r) =>
+                    `${r.lines.filter((l) => l.checked).length}/${r.lines.length}`,
+                },
+                { title: "Solicitado por", dataIndex: "by" },
+                {
+                  title: "Detalle",
+                  render: (_, r) => (
+                    <Button
+                      icon={<EyeOutlined />}
+                      onClick={() => setSelected(r.id)}
+                    >
+                      Ver detalle
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          </Card>
+          {!returns && (
+            <Card
+              className="main-card"
+              title={`Despachos y transferencias (${tasks.length})`}
+            >
+              <Table
+                rowKey="id"
+                dataSource={tasks}
+                columns={[
+                  { title: "Solicitud", dataIndex: "id" },
+                  { title: "Tipo", dataIndex: "type" },
+                  { title: "Activos", render: (_, r) => r.lines.length },
+                  { title: "Origen", dataIndex: "from" },
+                  { title: "Destino", dataIndex: "to" },
+                  { title: "Estado", dataIndex: "status", render: tagStatus },
+                  {
+                    title: "Detalle",
+                    render: (_, r) => (
+                      <Button
+                        icon={<EyeOutlined />}
+                        onClick={() => setSelected(r.id)}
+                      >
+                        Ver detalle
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            </Card>
+          )}
+        </>
+      )}
+    </>
+  );
 }

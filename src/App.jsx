@@ -30,7 +30,7 @@ import { useInventory } from "./context/InventoryContext";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Entry from "./pages/Entry";
-import RMA from "./pages/RMA";
+import Devoluciones from "./pages/Devoluciones";
 import Operations from "./pages/Operations";
 import Warehouse from "./pages/Warehouse";
 import History from "./pages/History";
@@ -72,14 +72,8 @@ export default function App() {
           },
         ]
       : []),
-    ...(manager
-      ? [
-          {
-            key: "rma",
-            icon: <RollbackOutlined />,
-            label: "Devolución",
-          },
-        ]
+      ...(manager
+      ? [{ key: "rma", icon: <RollbackOutlined />, label: "Devoluciones" }]
       : []),
     ...(role === "Almacenero"
       ? [
@@ -91,7 +85,7 @@ export default function App() {
           {
             key: "devoluciones",
             icon: <RollbackOutlined />,
-            label: "Devoluciones",
+            label: "Recepción de devoluciones",
           },
         ]
       : []),
@@ -111,8 +105,8 @@ export default function App() {
     dashboard: <Dashboard navigate={setPage} />,
     inventario: <Inventory detailId={detailId} setDetailId={setDetailId} />,
     ingresos: <Entry />,
-    rma: <RMA />,
     descargas: <Operations mode="descargas" />,
+    rma: <Devoluciones />,
     transferencias: <Operations mode="transferencias" />,
     almacen: <Warehouse />,
     devoluciones: <Warehouse returns />,

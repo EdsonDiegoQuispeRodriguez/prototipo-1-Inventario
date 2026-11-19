@@ -1,27 +1,446 @@
-import React,{useMemo,useState} from 'react';
-import {Card,Table,Select,Input,Button,Tag,Space,Alert,message,Row,Col,Typography,Badge,Divider,Empty,Descriptions} from 'antd';
-import {ShoppingCartOutlined,PlusOutlined,DeleteOutlined,SearchOutlined,ArrowLeftOutlined,EyeOutlined} from '@ant-design/icons';
-import {useInventory} from '../context/InventoryContext';
-import {PageHeading,tagStatus} from '../components/Common';
-const {Text}=Typography;
-export default function Operations({mode}){
- const {db,warehouses,available,createRequest}=useInventory();
- const transfer=mode==='transferencias',type=transfer?'Transferencia':'Salida';
- const [from,setFrom]=useState(null),[to,setTo]=useState(null),[screen,setScreen]=useState('list'),[q,setQ]=useState(''),[sub,setSub]=useState(null),[category,setCategory]=useState(null),[cart,setCart]=useState([]),[reason,setReason]=useState(''),[selected,setSelected]=useState(null);
- const assets=useMemo(()=>from?db.assets.filter(a=>a.warehouse===from):[],[db.assets,from]);
- const cats=[...new Set(assets.map(a=>a.category).filter(Boolean))].sort();
- const subs=[...new Set(assets.filter(a=>!category||a.category===category).map(a=>a.subcategory||a.type).filter(Boolean))].sort();
- const filtered=assets.filter(a=>(!category||a.category===category)&&(!sub||(a.subcategory||a.type)===sub)&&`${a.id} ${a.model} ${a.brand} ${a.serial} ${a.sku}`.toLowerCase().includes(q.toLowerCase()));
- const requests=db.requests.filter(r=>r.type===type&&(!from||r.from===from));
- const changeWarehouse=v=>{setFrom(v);setCart([]);setSub(null);setCategory(null);setQ('');setTo(null)};
- const add=a=>{if(!available(a))return message.warning('Este activo no está disponible');if(cart.includes(a.id))return message.info('Ya está en la solicitud');setCart(c=>[...c,a.id])};
- const submit=()=>{if(!from||!cart.length||!reason.trim()||(transfer&&!to))return message.warning('Completa el almacén, el carrito, el motivo y el destino si corresponde');const result=createRequest(type,cart.map(assetId=>({assetId})),reason,from,to);if(!result)return message.error('No se pudo crear la solicitud. Verifica disponibilidad');message.success('Solicitud agrupada enviada a preparación');setCart([]);setReason('');setScreen('list')};
- const cols=[{title:'Código de activo',dataIndex:'id',width:155},{title:'Subcategoría',render:(_,a)=>a.subcategory||a.type,width:150},{title:'Marca',dataIndex:'brand',width:130},{title:'Modelo',dataIndex:'model',width:220},{title:'Serie / identificador',dataIndex:'serial',render:v=>v||<Text type="secondary">Sin serie del fabricante</Text>,width:200},{title:'Disponible',render:(_,a)=><Tag color={available(a)?'green':'red'}>{available(a)?'Sí':'No'}</Tag>,width:110},{title:'Acción',fixed:'right',width:120,render:(_,a)=><Button size="small" type="primary" icon={<PlusOutlined/>} disabled={!available(a)||cart.includes(a.id)} onClick={()=>add(a)}>{cart.includes(a.id)?'Agregado':'Agregar'}</Button>}];
- const cartAssets=cart.map(id=>db.assets.find(a=>a.id===id)).filter(Boolean);
- return <><PageHeading title={transfer?'Transferencias entre almacenes':'Solicitudes de salida / despacho'} subtitle={transfer?'Solicitudes de traslado con múltiples activos y recepción en destino':'Una solicitud agrupa múltiples activos: reserva digital, preparación y despacho completo'}/>
- <Card className="main-card" style={{marginBottom:18}}><Row gutter={[16,12]} align="bottom"><Col xs={24} md={9}><Text strong>Almacén de origen</Text><Select style={{width:'100%',marginTop:6}} placeholder="Selecciona un almacén" value={from} onChange={changeWarehouse} options={warehouses.map(w=>({value:w,label:w}))}/></Col>{screen==='create'&&transfer&&<Col xs={24} md={8}><Text strong>Almacén de destino</Text><Select style={{width:'100%',marginTop:6}} placeholder="Selecciona destino" value={to} onChange={setTo} options={warehouses.filter(w=>w!==from).map(w=>({value:w,label:w}))}/></Col>}<Col flex="auto" style={{textAlign:'right'}}>{screen==='list'?<Button type="primary" disabled={!from} icon={<PlusOutlined/>} onClick={()=>setScreen('create')}>{transfer?'Nueva transferencia':'Nueva solicitud de salida'}</Button>:<Button icon={<ArrowLeftOutlined/>} onClick={()=>{setScreen('list');setCart([])}}>Volver al listado</Button>}</Col></Row></Card>
- {!from?<Card className="main-card"><Empty description="Selecciona el almacén para consultar sus activos y solicitudes"/></Card>:screen==='list'?<Card className="main-card" title={transfer?'Solicitudes de transferencia':'Solicitudes de salida y despacho'}><Table rowKey="id" dataSource={requests} pagination={{pageSize:8}} scroll={{x:1000}} columns={[{title:'Solicitud',dataIndex:'id'},{title:'Activos',render:(_,r)=>r.lines.length},{title:'Origen',dataIndex:'from'},{title:'Destino',dataIndex:'to',render:v=>v||'—'},{title:'Estado',dataIndex:'status',render:tagStatus},{title:'Solicitado por',dataIndex:'by'},{title:'Fecha',dataIndex:'date'},{title:'Detalle',render:(_,r)=><Button icon={<EyeOutlined/>} onClick={()=>setSelected(r.id)}>Ver solicitud</Button>}]}/>{selected&&<Card title={`Detalle · ${selected}`} style={{marginTop:14}} extra={<Button onClick={()=>setSelected(null)}>Cerrar</Button>}><Table rowKey="assetId" pagination={false} dataSource={db.requests.find(r=>r.id===selected)?.lines||[]} columns={[{title:'Código',dataIndex:'assetId'},{title:'Modelo',render:(_,l)=>db.assets.find(a=>a.id===l.assetId)?.model},{title:'Serie',render:(_,l)=>db.assets.find(a=>a.id===l.assetId)?.serial||'—'}]}/><Divider/><Descriptions column={1}><Descriptions.Item label="Motivo">{db.requests.find(r=>r.id===selected)?.reason}</Descriptions.Item><Descriptions.Item label="Estado">{db.requests.find(r=>r.id===selected)?.status}</Descriptions.Item></Descriptions></Card>}</Card>:<>
- <Card className="main-card" title="1. Buscar y seleccionar activos individuales" extra={<Badge count={cart.length}><Button icon={<ShoppingCartOutlined/>} onClick={()=>document.getElementById('carrito-operacion')?.scrollIntoView({behavior:'smooth'})}>Carrito de solicitud</Button></Badge>}><Alert style={{marginBottom:16}} showIcon type="info" message="Cada fila corresponde a una unidad física. El gestor y el almacenero acuerdan qué identificador o serie se entregará; la solicitud conserva exactamente esos activos."/><Row gutter={[12,12]} style={{marginBottom:16}}><Col xs={24} md={9}><Input prefix={<SearchOutlined/>} allowClear value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar modelo, marca, código o serie"/></Col><Col xs={12} md={7}><Select allowClear style={{width:'100%'}} placeholder="Categoría" value={category} onChange={v=>{setCategory(v||null);setSub(null)}} options={cats.map(v=>({value:v,label:v}))}/></Col><Col xs={12} md={8}><Select showSearch allowClear optionFilterProp="label" style={{width:'100%'}} placeholder="Subcategoría (ej. LAPTOP)" value={sub} onChange={v=>setSub(v||null)} options={subs.map(v=>({value:v,label:v}))}/></Col></Row><Table rowKey="id" dataSource={filtered} columns={cols} scroll={{x:1200}} pagination={{pageSize:10,showSizeChanger:true,pageSizeOptions:['10','20','50'],showTotal:n=>`${n} activos individuales`}}/></Card>
- <Card id="carrito-operacion" className="main-card" style={{marginTop:18}} title={<Space><ShoppingCartOutlined/>2. Activos de la solicitud <Badge count={cart.length}/></Space>}>{!cart.length?<Empty description="Agrega activos desde la tabla para armar una solicitud única"/>:<Table rowKey="id" size="small" pagination={false} dataSource={cartAssets} columns={[{title:'Código',dataIndex:'id'},{title:'Modelo',dataIndex:'model'},{title:'Serie',dataIndex:'serial',render:v=>v||'—'},{title:'',render:(_,a)=><Button danger type="text" icon={<DeleteOutlined/>} onClick={()=>setCart(c=>c.filter(id=>id!==a.id))}/>}]}/>}<Divider/><Row gutter={[16,12]}><Col xs={24} md={18}><Text strong>Motivo / ticket / destinatario</Text><Input.TextArea rows={3} style={{marginTop:7}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Indica motivo y referencia de la solicitud"/></Col><Col xs={24} md={6} style={{display:'flex',alignItems:'end'}}><Button block size="large" type="primary" disabled={!cart.length} onClick={submit}>{transfer?'Solicitar transferencia':'Reservar y enviar a preparación'}</Button></Col></Row></Card></>}
- </>;
+import React, { useMemo, useState } from "react";
+import {
+  Card,
+  Table,
+  Select,
+  Input,
+  Button,
+  Tag,
+  Space,
+  Alert,
+  message,
+  Row,
+  Col,
+  Typography,
+  Badge,
+  Divider,
+  Empty,
+  Descriptions,
+} from "antd";
+import RequestDetail from "../components/RequestDetail";
+import {
+  ShoppingCartOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  SearchOutlined,
+  ArrowLeftOutlined,
+  EyeOutlined,
+} from "@ant-design/icons";
+import { useInventory } from "../context/InventoryContext";
+import { PageHeading, tagStatus } from "../components/Common";
+const { Text } = Typography;
+export default function Operations({ mode }) {
+  const { db, warehouses, available, createRequest } = useInventory();
+  const transfer = mode === "transferencias",
+    type = transfer ? "Transferencia" : "Salida";
+  const [from, setFrom] = useState(null),
+    [to, setTo] = useState(null),
+    [screen, setScreen] = useState("list"),
+    [q, setQ] = useState(""),
+    [sub, setSub] = useState(null),
+    [category, setCategory] = useState(null),
+    [cart, setCart] = useState([]),
+    [reason, setReason] = useState(""),
+    [ticket, setTicket] = useState(""),
+    [user, setUser] = useState(""),
+    [selected, setSelected] = useState(null);
+  const assets = useMemo(
+    () => (from ? db.assets.filter((a) => a.warehouse === from) : []),
+    [db.assets, from],
+  );
+  const cats = [
+    ...new Set(assets.map((a) => a.category).filter(Boolean)),
+  ].sort();
+  const subs = [
+    ...new Set(
+      assets
+        .filter((a) => !category || a.category === category)
+        .map((a) => a.subcategory || a.type)
+        .filter(Boolean),
+    ),
+  ].sort();
+  const filtered = assets.filter(
+    (a) =>
+      (!category || a.category === category) &&
+      (!sub || (a.subcategory || a.type) === sub) &&
+      `${a.id} ${a.model} ${a.brand} ${a.serial} ${a.sku}`
+        .toLowerCase()
+        .includes(q.toLowerCase()),
+  );
+  const requests = db.requests.filter(
+    (r) => r.type === type && (!from || r.from === from),
+  );
+  const changeWarehouse = (v) => {
+    setFrom(v);
+    setCart([]);
+    setSub(null);
+    setCategory(null);
+    setQ("");
+    setTo(null);
+  };
+  const add = (a) => {
+    if (!available(a)) return message.warning("Este activo no está disponible");
+    if (cart.includes(a.id)) return message.info("Ya está en la solicitud");
+    setCart((c) => [...c, a.id]);
+  };
+  const submit = () => {
+    if (
+      !from ||
+      !cart.length ||
+      !reason.trim() ||
+      (!transfer && (!ticket.trim() || !user.trim())) ||
+      (transfer && !to)
+    )
+      return message.warning(
+        "Completa el almacén, el carrito, el motivo y el destino si corresponde",
+      );
+    const result = createRequest(
+      type,
+      cart.map((assetId) => ({ assetId })),
+      reason,
+      from,
+      to,
+      { ticket, user },
+    );
+    if (!result)
+      return message.error(
+        "No se pudo crear la solicitud. Verifica disponibilidad",
+      );
+    message.success("Solicitud agrupada enviada a preparación");
+    setCart([]);
+    setReason("");
+    setTicket("");
+    setUser("");
+    setScreen("list");
+  };
+  const cols = [
+    { title: "Código de activo", dataIndex: "id", width: 155 },
+    {
+      title: "Subcategoría",
+      render: (_, a) => a.subcategory || a.type,
+      width: 150,
+    },
+    { title: "Marca", dataIndex: "brand", width: 130 },
+    { title: "Modelo", dataIndex: "model", width: 220 },
+    {
+      title: "Serie / identificador",
+      dataIndex: "serial",
+      render: (v) =>
+        v || <Text type="secondary">Sin serie del fabricante</Text>,
+      width: 200,
+    },
+    {
+      title: "Disponible",
+      render: (_, a) => (
+        <Tag color={available(a) ? "green" : "red"}>
+          {available(a) ? "Sí" : "No"}
+        </Tag>
+      ),
+      width: 110,
+    },
+    {
+      title: "Acción",
+      fixed: "right",
+      width: 120,
+      render: (_, a) => (
+        <Button
+          size="small"
+          type="primary"
+          icon={<PlusOutlined />}
+          disabled={!available(a) || cart.includes(a.id)}
+          onClick={() => add(a)}
+        >
+          {cart.includes(a.id) ? "Agregado" : "Agregar"}
+        </Button>
+      ),
+    },
+  ];
+  const cartAssets = cart
+    .map((id) => db.assets.find((a) => a.id === id))
+    .filter(Boolean);
+  return (
+    <>
+      <PageHeading
+        title={
+          transfer
+            ? "Transferencias entre almacenes"
+            : "Solicitudes de salida / despacho"
+        }
+        subtitle={
+          transfer
+            ? "Solicitudes de traslado con múltiples activos y recepción en destino"
+            : "Una solicitud agrupa múltiples activos: reserva digital, preparación y despacho completo"
+        }
+      />
+      <Card className="main-card" style={{ marginBottom: 18 }}>
+        <Row gutter={[16, 12]} align="bottom">
+          <Col xs={24} md={9}>
+            <Text strong>Almacén de origen</Text>
+            <Select
+              style={{ width: "100%", marginTop: 6 }}
+              placeholder="Selecciona un almacén"
+              value={from}
+              onChange={changeWarehouse}
+              options={warehouses.map((w) => ({ value: w, label: w }))}
+            />
+          </Col>
+          {screen === "create" && transfer && (
+            <Col xs={24} md={8}>
+              <Text strong>Almacén de destino</Text>
+              <Select
+                style={{ width: "100%", marginTop: 6 }}
+                placeholder="Selecciona destino"
+                value={to}
+                onChange={setTo}
+                options={warehouses
+                  .filter((w) => w !== from)
+                  .map((w) => ({ value: w, label: w }))}
+              />
+            </Col>
+          )}
+          <Col flex="auto" style={{ textAlign: "right" }}>
+            {screen === "list" ? (
+              <Button
+                type="primary"
+                disabled={!from}
+                icon={<PlusOutlined />}
+                onClick={() => setScreen("create")}
+              >
+                {transfer ? "Nueva transferencia" : "Nueva solicitud de salida"}
+              </Button>
+            ) : (
+              <Button
+                icon={<ArrowLeftOutlined />}
+                onClick={() => {
+                  setScreen("list");
+                  setCart([]);
+                }}
+              >
+                Volver al listado
+              </Button>
+            )}
+          </Col>
+        </Row>
+      </Card>
+      {selected ? (
+        <RequestDetail
+          request={db.requests.find((r) => r.id === selected)}
+          assets={db.assets}
+          onBack={() => setSelected(null)}
+        />
+      ) : !from ? (
+        <Card className="main-card">
+          <Empty description="Selecciona el almacén para consultar sus activos y solicitudes" />
+        </Card>
+      ) : screen === "list" ? (
+        <Card
+          className="main-card"
+          title={
+            transfer
+              ? "Solicitudes de transferencia"
+              : "Solicitudes de salida y despacho"
+          }
+        >
+          <Table
+            rowKey="id"
+            dataSource={requests}
+            pagination={{ pageSize: 8 }}
+            scroll={{ x: 1000 }}
+            columns={[
+              { title: "Solicitud", dataIndex: "id" },
+              { title: "Activos", render: (_, r) => r.lines.length },
+              { title: "Origen", dataIndex: "from" },
+              { title: "Destino", dataIndex: "to", render: (v) => v || "—" },
+              { title: "Estado", dataIndex: "status", render: tagStatus },
+              { title: "Solicitado por", dataIndex: "by" },
+              { title: "Fecha", dataIndex: "date" },
+              {
+                title: "Detalle",
+                render: (_, r) => (
+                  <Button
+                    icon={<EyeOutlined />}
+                    onClick={() => setSelected(r.id)}
+                  >
+                    Ver solicitud
+                  </Button>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      ) : (
+        <>
+          <Card
+            className="main-card"
+            title="1. Buscar y seleccionar activos individuales"
+            extra={
+              <Badge count={cart.length}>
+                <Button
+                  icon={<ShoppingCartOutlined />}
+                  onClick={() =>
+                    document
+                      .getElementById("carrito-operacion")
+                      ?.scrollIntoView({ behavior: "smooth" })
+                  }
+                >
+                  Carrito de solicitud
+                </Button>
+              </Badge>
+            }
+          >
+            <Alert
+              style={{ marginBottom: 16 }}
+              showIcon
+              type="info"
+              message="Cada fila corresponde a una unidad física. El gestor y el almacenero acuerdan qué identificador o serie se entregará; la solicitud conserva exactamente esos activos."
+            />
+            <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+              <Col xs={24} md={9}>
+                <Input
+                  prefix={<SearchOutlined />}
+                  allowClear
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar modelo, marca, código o serie"
+                />
+              </Col>
+              <Col xs={12} md={7}>
+                <Select
+                  allowClear
+                  style={{ width: "100%" }}
+                  placeholder="Categoría"
+                  value={category}
+                  onChange={(v) => {
+                    setCategory(v || null);
+                    setSub(null);
+                  }}
+                  options={cats.map((v) => ({ value: v, label: v }))}
+                />
+              </Col>
+              <Col xs={12} md={8}>
+                <Select
+                  showSearch
+                  allowClear
+                  optionFilterProp="label"
+                  style={{ width: "100%" }}
+                  placeholder="Subcategoría (ej. LAPTOP)"
+                  value={sub}
+                  onChange={(v) => setSub(v || null)}
+                  options={subs.map((v) => ({ value: v, label: v }))}
+                />
+              </Col>
+            </Row>
+            <Table
+              rowKey="id"
+              dataSource={filtered}
+              columns={cols}
+              scroll={{ x: 1200 }}
+              pagination={{
+                pageSize: 10,
+                showSizeChanger: true,
+                pageSizeOptions: ["10", "20", "50"],
+                showTotal: (n) => `${n} activos individuales`,
+              }}
+            />
+          </Card>
+          <Card
+            id="carrito-operacion"
+            className="main-card"
+            style={{ marginTop: 18 }}
+            title={
+              <Space>
+                <ShoppingCartOutlined />
+                2. Activos de la solicitud <Badge count={cart.length} />
+              </Space>
+            }
+          >
+            {!cart.length ? (
+              <Empty description="Agrega activos desde la tabla para armar una solicitud única" />
+            ) : (
+              <Table
+                rowKey="id"
+                size="small"
+                pagination={false}
+                dataSource={cartAssets}
+                columns={[
+                  { title: "Código", dataIndex: "id" },
+                  { title: "Modelo", dataIndex: "model" },
+                  {
+                    title: "Serie",
+                    dataIndex: "serial",
+                    render: (v) => v || "—",
+                  },
+                  {
+                    title: "",
+                    render: (_, a) => (
+                      <Button
+                        danger
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        onClick={() =>
+                          setCart((c) => c.filter((id) => id !== a.id))
+                        }
+                      />
+                    ),
+                  },
+                ]}
+              />
+            )}
+            <Divider />
+            <Row gutter={[16, 12]}>
+              <Col xs={24} md={18}>
+                {!transfer && (
+                  <Row gutter={12} style={{ marginBottom: 12 }}>
+                    <Col xs={24} md={12}>
+                      <Text strong>Ticket</Text>
+                      <Input
+                        value={ticket}
+                        onChange={(e) => setTicket(e.target.value)}
+                        placeholder="Ej. INC0012345"
+                        style={{ marginTop: 6 }}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Text strong>Usuario destinatario</Text>
+                      <Input
+                        value={user}
+                        onChange={(e) => setUser(e.target.value)}
+                        placeholder="Nombre o identificador del usuario"
+                        style={{ marginTop: 6 }}
+                      />
+                    </Col>
+                  </Row>
+                )}
+                <Text strong>Motivo de la solicitud</Text>
+                <Input.TextArea
+                  rows={3}
+                  style={{ marginTop: 7 }}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Indica motivo y referencia de la solicitud"
+                />
+              </Col>
+              <Col
+                xs={24}
+                md={6}
+                style={{ display: "flex", alignItems: "end" }}
+              >
+                <Button
+                  block
+                  size="large"
+                  type="primary"
+                  disabled={!cart.length}
+                  onClick={submit}
+                >
+                  {transfer
+                    ? "Solicitar transferencia"
+                    : "Reservar y enviar a preparación"}
+                </Button>
+              </Col>
+            </Row>
+          </Card>
+        </>
+      )}
+    </>
+  );
 }
